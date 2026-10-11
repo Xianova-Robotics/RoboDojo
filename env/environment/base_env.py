@@ -7,8 +7,20 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab_tasks.utils import parse_env_cfg  # this need dynamic import
 from isaacsim.core.utils.stage import get_current_stage
 from omegaconf import DictConfig, OmegaConf
-from omni.physx import acquire_physx_interface
 
+try:
+    from omni.physx import acquire_physx_interface
+except ImportError:  # omni.physx 110+ (Isaac Sim 6.x) renamed the accessor
+    from omni.physx import get_physx_interface as acquire_physx_interface
+
+from env.environment.isaac.compat import (
+    apply_render_settings,
+    enable_rtx_sensor_rendering,
+    ensure_legacy_physics_view,
+    get_physx_cfg,
+    release_legacy_physics_view,
+    render_sim,
+)
 from env.environment.isaac.isaac_rl_env import IsaacRLEnv
 from env.seeding import seed_everywhere
 
@@ -75,19 +87,19 @@ def _resolve_sim_section(defaults, overrides):
 
 def _apply_physx_settings(physx_cfg, config):
     for key, value in config.items():
+        if not hasattr(physx_cfg, key):
+            print(f"[BaseEnv] PhysX config has no field '{key}', skipping")
+            continue
         setattr(physx_cfg, key, value)
 
 
-def _apply_render_settings(render_cfg, render_config, frequency_settings):
-    for key in _RENDER_KEYS:
-        setattr(render_cfg, key, render_config[key])
-
+def _apply_render_settings(sim_cfg, render_config, frequency_settings):
     carb_settings = render_config.get("carb_settings") or {}
     if isinstance(carb_settings, DictConfig):
         carb_settings = OmegaConf.to_container(carb_settings, resolve=True)
-    carb_settings = dict(carb_settings)
-    carb_settings.update(frequency_settings)
-    render_cfg.carb_settings = carb_settings
+    render_config = {k: render_config[k] for k in _RENDER_KEYS}
+    render_config["carb_settings"] = dict(carb_settings)
+    apply_render_settings(sim_cfg, render_config, dict(frequency_settings))
 
 
 class BaseEnv(gym.Env):
@@ -160,7 +172,7 @@ class BaseEnv(gym.Env):
         Render the simulation. This will call the render function of the simulation backend.
         """
         if self.sim is not None:
-            self.sim.sim.render()
+            render_sim(self.sim.sim)
 
     def setup_sim_cfg(self, config):
         """
@@ -178,8 +190,8 @@ class BaseEnv(gym.Env):
             self.config.get("frequency_settings"),
         )
 
-        _apply_render_settings(self.sim_cfg.sim.render, render_config, frequency_settings)
-        _apply_physx_settings(self.sim_cfg.sim.physx, physx_config)
+        _apply_render_settings(self.sim_cfg.sim, render_config, frequency_settings)
+        _apply_physx_settings(get_physx_cfg(self.sim_cfg.sim), physx_config)
 
     def sim_step(self, render: bool = True):
         """
@@ -195,9 +207,12 @@ class BaseEnv(gym.Env):
         # enable cpu garment and deformable
         self.physics_interface = acquire_physx_interface()
         self.physics_interface.overwrite_gpu_setting(1)
+        enable_rtx_sensor_rendering()
 
-        # expose physics context
-        self.physics_context = sim.sim.get_physics_context()
+        # expose physics context (Isaac Lab 3.0 no longer wraps a PhysicsContext)
+        self.physics_context = (
+            sim.sim.get_physics_context() if hasattr(sim.sim, "get_physics_context") else None
+        )
 
     def close(self):
         try:
@@ -209,6 +224,7 @@ class BaseEnv(gym.Env):
         except Exception as e:
             print("[restart] timeline stop/set failed:", e)
 
+        release_legacy_physics_view()
         if self.sim is not None:
             self.sim.close()
             self.sim = None
@@ -236,6 +252,7 @@ class BaseEnv(gym.Env):
         if self.sim is None:
             self.launch_sim(self.config)
         self.sim.reset(options=options)
+        ensure_legacy_physics_view(self.sim.sim)
 
     def _setup_scene(self, sim: IsaacRLEnv):
         self.setup_physics(sim)

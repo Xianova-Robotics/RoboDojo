@@ -61,6 +61,11 @@ parser.add_argument(
 parser.add_argument("--seed", type=int, required=True, help="policy seed for eval")
 
 AppLauncher.add_app_launcher_args(parser)
+# Isaac Lab 3.0 dropped these CLI flags (headless is the default, cameras are
+# always supported) but AppLauncher still accepts them as config keys.
+for _compat_flag in ("--headless", "--enable_cameras"):
+    if _compat_flag not in parser._option_string_actions:
+        parser.add_argument(_compat_flag, action="store_true", help=argparse.SUPPRESS)
 args_cli = parser.parse_args()
 
 # Safe to import before AppLauncher: env is a namespace package (no __init__)
@@ -124,6 +129,27 @@ if enable_monitor:
 from env.camera_manager.capture.render_sync import add_zero_delay_kit_args
 
 add_zero_delay_kit_args(args_cli)
+
+
+def _add_deprecated_exts_folder(args) -> None:
+    """Expose Isaac Sim's ``extsDeprecated`` folder to Kit.
+
+    Isaac Sim 6.x moved the classic ``isaacsim.core.*`` / ``isaacsim.sensors.camera``
+    extensions there, and the Isaac Lab 3.0 experience files do not list that folder.
+
+    :param args: AppLauncher argparse namespace, mutated in place
+    """
+    try:
+        import isaacsim
+    except ImportError:
+        return
+    ext_dir = os.path.join(os.path.dirname(isaacsim.__file__), "extsDeprecated")
+    current = getattr(args, "kit_args", None) or ""
+    if os.path.isdir(ext_dir) and ext_dir not in current:
+        args.kit_args = f"{current} --ext-folder {ext_dir}".strip()
+
+
+_add_deprecated_exts_folder(args_cli)
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -383,6 +409,8 @@ def main():
                 flush=True,
             )
             traceback.print_exc()
+            if os.environ.get("ROBODOJO_FAIL_FAST") == "1":
+                raise
             if enable_monitor and get_monitor().is_fatal():
                 fatal_msg = get_monitor().get_fatal_message() or str(e)
                 if get_monitor().requires_shell_restart():

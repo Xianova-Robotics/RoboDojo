@@ -6,6 +6,7 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
+import os
 from typing import Any, List, Tuple
 
 from isaacsim.core.prims import XFormPrim
@@ -350,6 +351,19 @@ class CameraView(XFormPrim):
 
             # use a warp kernel to convert the linear sensor data to a batch of images
             num_tiles_x = self.tiled_resolution[0] // width
+            expected_size = self.tiled_resolution[0] * self.tiled_resolution[1] * channels
+            if os.environ.get("ROBODOJO_DEBUG_CAPTURE") == "1":
+                print(
+                    f"[camera_view] {annotator_type}: tiled_data shape={getattr(tiled_data, 'shape', None)} "
+                    f"dtype={getattr(tiled_data, 'dtype', None)} device={getattr(tiled_data, 'device', None)} "
+                    f"expected_size={expected_size} out shape={out.shape} device={out.device}"
+                )
+            if getattr(tiled_data, "size", expected_size) < expected_size:
+                print(
+                    f"[camera_view] WARNING: {annotator_type} annotator returned {getattr(tiled_data, 'size', None)} "
+                    f"elements, expected {expected_size}; frame not ready, returning stale/zero buffer"
+                )
+                return out, info
             wp.launch(
                 kernel=reshape_tiled_image,
                 dim=(num_cameras, height, width),

@@ -2,6 +2,7 @@ from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 import isaaclab.sim as sim_utils
 
+from env.environment.isaac.compat import quat_to_lab
 from env.global_configs import ROBOTS_PATH
 
 
@@ -34,7 +35,7 @@ def get_robot_config():
                 "panda_finger_joint2": 0.04,
             },
             pos=(0.25, -0.25, 0.0),
-            rot=(0.707, 0, 0, 0.707),
+            rot=quat_to_lab((0.707, 0, 0, 0.707)),
         ),
         actuators={
             "panda_shoulder": ImplicitActuatorCfg(
