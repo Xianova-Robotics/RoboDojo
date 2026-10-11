@@ -14,7 +14,7 @@ from isaacsim.core.utils.prims import (
 )
 from isaacsim.core.utils.stage import get_current_stage
 from isaacsim.core.utils.string import find_unique_string_name
-from isaacsim.replicator.behavior.utils.scene_utils import create_mdl_material
+from utils.usd_compat import create_mdl_material
 import numpy as np
 from omegaconf import DictConfig
 import omni.kit.commands

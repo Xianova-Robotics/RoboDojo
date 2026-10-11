@@ -2,9 +2,10 @@ from collections.abc import Sequence
 
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import PhysxCfg, SimulationCfg
+from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
 
+from env.environment.isaac.compat import make_simulation_cfg
 from env.environment.isaac.direct_rl_env import CustomDirectRLEnv
 
 
@@ -20,11 +21,7 @@ class IsaacRLEnvCfg(DirectRLEnvCfg):
         num_envs=1,
         env_spacing=4.0,
     )
-    sim: SimulationCfg = SimulationCfg(
-        device="cuda:0",
-        gravity=(0.0, 0.0, -9.81),
-        physx=PhysxCfg(),
-    )
+    sim: SimulationCfg = make_simulation_cfg(device="cuda:0", gravity=(0.0, 0.0, -9.81))
 
 
 class IsaacRLEnv(CustomDirectRLEnv):
@@ -37,7 +34,9 @@ class IsaacRLEnv(CustomDirectRLEnv):
 
     def _setup_scene(self):
         self.func["_setup_scene"](self)
-        self.scene.clone_environments(copy_from_source=True)
+        # Isaac Lab 3.0 replicates cfg-declared assets inside InteractiveScene.__init__.
+        if hasattr(self.scene, "clone_environments"):
+            self.scene.clone_environments(copy_from_source=True)
         self.func["_post_setup_scene"](self)
 
     def _get_observations(self):
