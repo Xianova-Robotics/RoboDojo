@@ -8,6 +8,31 @@ import importlib.util
 IS_ISAACLAB3 = importlib.util.find_spec("isaaclab_physx") is not None
 
 
+def quat_to_lab(quat_wxyz):
+    """Convert a ``(w, x, y, z)`` quaternion to the Isaac Lab config/data convention.
+
+    Isaac Lab 3.0 switched to ``(x, y, z, w)``; 2.3 keeps ``(w, x, y, z)``.
+
+    :param quat_wxyz: sequence of four floats
+    :return: tuple in the running Isaac Lab convention
+    """
+    w, x, y, z = (float(v) for v in quat_wxyz)
+    return (x, y, z, w) if IS_ISAACLAB3 else (w, x, y, z)
+
+
+def pose_from_lab(pose):
+    """Convert an Isaac Lab ``(pos, quat)`` 7-vector to RoboDojo's ``[x, y, z, qw, qx, qy, qz]`` layout.
+
+    :param pose: torch tensor ``(..., 7)`` as returned by ``*_pose_w`` buffers
+    :return: tensor with the quaternion in ``(w, x, y, z)`` order
+    """
+    if not IS_ISAACLAB3:
+        return pose
+    import torch
+
+    return torch.cat([pose[..., :3], pose[..., 6:7], pose[..., 3:6]], dim=-1)
+
+
 def make_physx_cfg():
     """Return a PhysX configuration object for the running Isaac Lab version.
 

@@ -10,6 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 import torch
 import transforms3d as t3d
 
+from env.environment.isaac.compat import pose_from_lab, quat_to_lab
 from env.environment.isaac.isaac_rl_env import IsaacRLEnv
 from env.global_configs import ENV_REGEX_NAMESPACE
 from env.planner_manager.curobo_planner import CuroboPlanner
@@ -145,7 +146,7 @@ class RobotManager:
         key = self.robot_key[self.robot_list.index(robot)]
         entity_link = key.body_names
         env_origin_pos = deepcopy(self.scene.env_origins)
-        link_pose = key.data.body_link_pose_w.clone()
+        link_pose = pose_from_lab(key.data.body_link_pose_w.clone())
 
         if link_name not in entity_link:
             raise ValueError(f"Link name {link_name} not found in robot {robot.robot_name}")
@@ -624,7 +625,7 @@ class RobotManager:
             prim_path=f"{ENV_REGEX_NAMESPACE}/robot{idx}",
             init_state=ArticulationCfg.InitialStateCfg(
                 pos=base_pose[:3],
-                rot=base_pose[-4:],
+                rot=quat_to_lab(base_pose[-4:]),
                 joint_pos=scene_cfg.init_state.joint_pos,
             ),
         )
